@@ -7,10 +7,10 @@ const cors = require("cors");
 
 const app = express();
 
-// Allow CORS - payagan ang lahat muna (for testing)
+// Enable CORS for all origins (for testing)
 app.use(cors({
   origin: "*",
-  methods: ["GET", "POST"],
+  methods: ["GET", "POST", "OPTIONS"],
   credentials: true
 }));
 
@@ -19,51 +19,53 @@ app.get("/", (req, res) => res.send("Obsidian server is running."));
 
 const server = http.createServer(app);
 
-// PeerJS server with correct config
+// PeerJS server
 const peerServer = ExpressPeerServer(server, { 
   path: "/",
   allow_discovery: true
 });
 app.use("/peerjs", peerServer);
 
-// Socket.io with correct WebSocket config
+// Socket.io with proper configuration
 const io = new Server(server, {
   cors: {
     origin: "*",
     methods: ["GET", "POST"],
     credentials: true
   },
-  transports: ['websocket', 'polling'],  // Allow both
-  allowEIO3: true
+  transports: ['websocket', 'polling'],
+  allowEIO3: true,
+  pingTimeout: 60000,
+  pingInterval: 25000
 });
 
 let waitingUser = null;
 
 io.on("connection", (socket) => {
-  console.log(`[Socket] Connected: ${socket.id}`);
+  console.log(`✅ Connected: ${socket.id}`);
+  console.log(`📡 Transport: ${socket.conn.transport.name}`);
 
   socket.on("register", ({ name, peerId }) => {
-    console.log(`[Register] ${name} (${peerId}) - Socket: ${socket.id}`);
+    console.log(`📝 Register: ${name} (${peerId})`);
     
     if (waitingUser && waitingUser.socketId !== socket.id) {
       const partner = waitingUser;
       waitingUser = null;
       
-      console.log(`[Match] ${name} <-> ${partner.name}`);
+      console.log(`🎉 MATCH: ${name} <-> ${partner.name}`);
       
       socket.emit("peer-found", { name: partner.name, peerId: partner.peerId });
       io.to(partner.socketId).emit("peer-found", { name, peerId });
     } else {
       waitingUser = { socketId: socket.id, name, peerId };
       socket.emit("waiting");
-      console.log(`[Waiting] ${name} is in queue`);
+      console.log(`⏳ Waiting: ${name}`);
     }
   });
 
   socket.on("disconnect", () => {
-    console.log(`[Disconnect] ${socket.id}`);
+    console.log(`❌ Disconnected: ${socket.id}`);
     if (waitingUser?.socketId === socket.id) {
-      console.log(`[Removed] ${waitingUser.name} from queue`);
       waitingUser = null;
     }
   });
@@ -71,7 +73,7 @@ io.on("connection", (socket) => {
 
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`Obsidian server running on port ${PORT}`);
-  console.log(`Socket.io ready`);
-  console.log(`PeerJS ready at /peerjs`);
+  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`🔗 Socket.io ready`);
+  console.log(`🔗 PeerJS ready at /peerjs`);
 });
